@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Parçacık Evreni — Şaşırt</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #05060f; font-family: 'Segoe UI', system-ui, sans-serif; }
+  canvas { display: block; }
+
+  .hud {
+    position: fixed; top: 18px; left: 0; right: 0;
+    display: flex; justify-content: space-between; align-items: flex-start;
+    padding: 0 22px; pointer-events: none; z-index: 10;
+  }
+  .hud > * { pointer-events: auto; }
+
+  .title {
+    color: rgba(255,255,255,.85); font-size: 13px; letter-spacing: 3px;
+    text-transform: uppercase; text-shadow: 0 0 12px rgba(120,160,255,.6);
+  }
+
+  .input-wrap { text-align: center; margin-top: -6px; }
+  #wordInput {
+    background: rgba(255,255,255,.06);
+    border: 1px solid rgba(255,255,255,.18);
+    color: #fff; font-size: 16px; letter-spacing: 4px;
+    padding: 8px 16px; width: 260px; text-align: center; border-radius: 24px;
+    outline: none; backdrop-filter: blur(6px);
+    transition: border-color .3s, box-shadow .3s;
+  }
+  #wordInput:focus {
+    border-color: rgba(140,180,255,.7);
+    box-shadow: 0 0 18px rgba(100,140,255,.35);
+  }
+  #wordInput::placeholder { color: rgba(255,255,255,.3); letter-spacing: 2px; font-size: 13px; }
+
+  .btns { display: flex; gap: 10px; justify-content: flex-end; }
+  .btn {
+    background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.18);
+    color: rgba(255,255,255,.8); width: 38px; height: 38px; border-radius: 50%;
+    cursor: pointer; font-size: 16px; line-height: 1; backdrop-filter: blur(6px);
+    transition: transform .15s, background .2s;
+  }
+  .btn:hover { background: rgba(255,255,255,.16); transform: scale(1.1); }
+
+  .hint {
+    position: fixed; bottom: 22px; left: 0; right: 0; text-align: center;
+    color: rgba(255,255,255,.35); font-size: 12px; letter-spacing: 1.5px;
+    transition: opacity 1.5s; pointer-events: none; z-index: 10;
+  }
+  .secret {
+    position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+    color: #fff; font-size: clamp(20px, 4vw, 40px); letter-spacing: 6px;
+    text-align: center; opacity: 0; pointer-events: none; z-index: 20;
+    text-shadow: 0 0 30px rgba(255,255,255,.8); transition: opacity .8s;
+  }
+  .bg { position: fixed; inset: 0; z-index: 0;
+    background: radial-gradient(ellipse at 50% 120%, #101636 0%, #05060f 65%); }
+</style>
+</head>
+<body>
+<div class="bg"></div>
+<canvas id="c"></canvas>
+
+<div class="hud">
+  <div class="title">Parçacık Evreni</div>
+  <div class="input-wrap">
+    <input id="wordInput" maxlength="14" placeholder="bir şey yaz, Enter'a bas..." autocomplete="off">
+  </div>
+  <div class="btns">
+    <button class="btn" id="btnTheme" title="Renk teması">🎨</button>
+    <button class="btn" id="btnSound" title="Ses aç/kapat">🔊</button>
+  </div>
+</div>
+
+<div class="hint" id="hint">fareyi gezdir · tıkla · kelime yaz · <b>kalp</b> ya da <b>yıldız</b> yazmayı dene</div>
+<div class="secret" id="secret"></div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+  const input = document.getElementById('wordInput');
+  const hint = document.getElementById('hint');
+  const secretEl = document.getElementById('secret');
+  const btnTheme = document.getElementById('btnTheme');
+  const btnSound = document.getElementById('btnSound');
+
+  let W, H, DPR;
+  function resize() {
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth; H = window.innerHeight;
+    canvas.width = W * DPR; canvas.height = H * DPR;
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  }
+  resize();
+
+  const themes = [
+    { bg: '#05060f', hues: [200, 230, 260], glow: 'rgba(120,160,255,.8)' },
+    { bg: '#0f0508', hues: [350, 15, 330], glow: 'rgba(255,120,160,.8)' },
+    { bg: '#04100a', hues: [140, 100, 170], glow: 'rgba(120,255,170,.8)' },
+    { bg: '#100d04', hues: [45, 30, 60],  glow: 'rgba(255,210,120,.8)' },
+  ];
+  let theme = 0;
+
+  const COUNT = Math.min(2600, Math.max(900, Math.floor(W * H / 700)));
+  const parts = [];
+  for (let i = 0; i < COUNT; i++) {
+    parts.push({
+      x: Math.random() * W, y: Math.random() * H,
+      vx: 0, vy: 0, tx: W / 2, ty: H / 2,
+      hue: 0, r: Math.random() * 1.6 + 0.6,
+      free: Math.random() < 0.18,
+    });
+  }
+  function tint() {
+    const t = themes[theme];
+    for (const p of parts) {
+      p.hue = t.hues[Math.floor(Math.random() * t.hues.length)] + Math.random() * 24 - 12;
+    }
+  }
+  tint();
+
+  const mouse = { x: -9999, y: -9999, down: false };
+  let frame = 0;
+
+  const off = document.createElement('canvas');
+  const octx = off.getContext('2d', { willReadFrequently: true });
+
+  function targetsFromText(text) {
+    const fs = Math.min(W / (text.length * 0.72), H * 0.42);
+    off.width = W; off.height = H;
+    octx.fillStyle = '#fff';
+    octx.font = '900 ' + fs + 'px "Segoe UI", system-ui, sans-serif';
+    octx.textAlign = 'center'; octx.textBaseline = 'middle';
+    octx.fillText(text, W / 2, H / 2);
+    const data = octx.getImageData(0, 0, W, H).data;
+    const pts = [];
+    const step = 3;
+    for (let y = 0; y < H; y += step)
+      for (let x = 0; x < W; x += step)
+        if (data[(y * W + x) * 4 + 3] > 128) pts.push([x, y]);
+    return pts;
+  }
+
+  function targetsFromShape(kind) {
+    const cx = W / 2, cy = H / 2, s = Math.min(W, H) * 0.32;
+    const pts = [];
+    if (kind === 'kalp') {
+      for (let i = 0; i < 1400; i++) {
+        const t = Math.random() * Math.PI * 2;
+        const m = 1 + Math.random() * 0.06;
+        const x = 16 * Math.pow(Math.sin(t), 3) / 16 * m;
+        const y = -(13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t)) / 16 * m;
+        pts.push([cx + x * s * 1.4, cy + y * s * 1.4]);
+      }
+    } else {
+      for (let i = 0; i < 1400; i++) {
+        const arm = Math.floor(Math.random() * 5);
+        const t = Math.random();
+        const r = t * s * 1.35;
+        const a = arm * (Math.PI * 2 / 5) + t * 4.5;
+        pts.push([cx + Math.cos(a) * r, cy + Math.sin(a) * r]);
+      }
+    }
+    return pts;
+  }
+
+  let shapeMode = null;
+  function morph(mode, text) {
+    shapeMode = mode;
+    let pts;
+    if (mode === 'text') pts = targetsFromText(text);
+    else pts = targetsFromShape(mode);
+    for (let i = 0; i < parts.length; i++) {
+      const p = parts[i];
+      if (p.free) continue;
+      const q = pts[i % pts.length];
+      p.tx = q[0] + (Math.random() - 0.5) * 3;
+      p.ty = q[1] + (Math.random() - 0.5) * 3;
+    }
+  }
+
+  let soundOn = true, actx = null;
+  function ping(freq) {
+    if (!soundOn) return;
+    if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+    if (actx.state === 'suspended') actx.resume();
+    const o = actx.createOscillator(), g = actx.createGain();
+    o.type = 'sine';
+    o.frequency.value = freq;
+    g.gain.setValueAtTime(0.0001, actx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.18, actx.currentTime + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + 0.6);
+    o.connect(g).connect(actx.destination);
+    o.start(); o.stop(actx.currentTime + 0.65);
+  }
+  const scale = [523.25, 587.33, 659.25, 783.99, 880.00];
+
+  const bursts = [];
+  function burst(x, y) {
+    bursts.push({ x, y, t: 0 });
+    ping(scale[Math.floor(Math.random() * scale.length)]);
+  }
+
+  canvas.addEventListener('pointermove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
+  canvas.addEventListener('pointerleave', () => { mouse.x = -9999; mouse.y = -9999; });
+  canvas.addEventListener('pointerdown', e => burst(e.clientX, e.clientY));
+
+  function showSecret(msg) {
+    secretEl.textContent = msg;
+    secretEl.style.opacity = 1;
+    setTimeout(() => { secretEl.style.opacity = 0; }, 2600);
+  }
+
+  function onSubmit() {
+    const raw = input.value.trim().toLocaleLowerCase('tr');
+    if (!raw) return;
+    if (raw === 'kalp' || raw === 'yıldız') {
+      morph(raw, raw);
+      showSecret(raw === 'kalp' ? '♡' : '✦');
+    } else {
+      morph('text', raw.toLocaleUpperCase('tr'));
+      if (raw === 'merhaba dünya' || raw === 'hello world') showSecret('Eski dostum! 👋');
+      if (raw === 'sürpriz') { ping(659.25); setTimeout(() => ping(880), 150); setTimeout(() => ping(1046.5), 300); }
+    }
+    input.value = ''; input.blur();
+    hint.style.opacity = 0;
+  }
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') onSubmit(); });
+
+  btnTheme.addEventListener('click', () => { theme = (theme + 1) % themes.length; tint(); document.body.style.background = themes[theme].bg; });
+  btnSound.addEventListener('click', () => { soundOn = !soundOn; btnSound.textContent = soundOn ? '🔊' : '🔇'; });
+
+  let last = performance.now();
+  function tick(now) {
+    const dt = Math.min((now - last) / 16.67, 3); last = now;
+    frame++;
+
+    ctx.fillStyle = 'rgba(5,6,15,0.28)';
+    ctx.fillRect(0, 0, W, H);
+    const t = themes[theme];
+
+    ctx.globalCompositeOperation = 'lighter';
+    for (const p of parts) {
+      if (p.free) {
+        p.x += Math.sin(frame * 0.004 + p.r * 40) * 0.25 * dt;
+        p.y += Math.cos(frame * 0.003 + p.r * 60) * 0.2 * dt;
+        p.tx = p.x; p.ty = p.y;
+      } else {
+        p.vx += (p.tx - p.x) * 0.012 * dt;
+        p.vy += (p.ty - p.y) * 0.012 * dt;
+      }
+      const dx = p.x - mouse.x, dy = p.y - mouse.y;
+      const d2 = dx * dx + dy * dy;
+      if (d2 < 16900 && d2 > 0.01) {
+        const d = Math.sqrt(d2), f = (130 - d) / 130 * 2.2;
+        p.vx += dx / d * f * dt; p.vy += dy / d * f * dt;
+      }
+      p.vx *= 0.9; p.vy *= 0.9;
+      p.x += p.vx * dt; p.y += p.vy * dt;
+
+      ctx.fillStyle = 'hsla(' + p.hue + ',90%,65%,0.85)';
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, 6.2832);
+      ctx.fill();
+    }
+
+    for (let i = bursts.length - 1; i >= 0; i--) {
+      const b = bursts[i]; b.t += 0.035 * dt;
+      if (b.t >= 1) { bursts.splice(i, 1); continue; }
+      ctx.strokeStyle = 'hsla(' + t.hues[0] + ',90%,70%,' + (1 - b.t) * 0.7 + ')';
+      ctx.lineWidth = 2.5 * (1 - b.t);
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, b.t * Math.min(W, H) * 0.45, 0, 6.2832);
+      ctx.stroke();
+    }
+    ctx.globalCompositeOperation = 'source-over';
+
+    requestAnimationFrame(tick);
+  }
+
+  window.addEventListener('resize', () => { resize(); if (shapeMode) morph(shapeMode, input.value); });
+  morph('text', 'MERHABA');
+  setTimeout(() => { hint.style.opacity = 0; }, 9000);
+  requestAnimationFrame(tick);
+})();
+</script>
+</body>
+</html>
