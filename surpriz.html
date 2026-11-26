@@ -7,7 +7,7 @@
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { width: 100%; height: 100%; overflow: hidden; background: #05060f; font-family: 'Segoe UI', system-ui, sans-serif; }
-  canvas { display: block; }
+  canvas { display: block; touch-action: none; }
 
   .hud {
     position: fixed; top: 18px; left: 0; right: 0;
@@ -21,13 +21,13 @@
     text-transform: uppercase; text-shadow: 0 0 12px rgba(120,160,255,.6);
   }
 
-  .input-wrap { text-align: center; margin-top: -6px; }
+  .input-wrap { display: flex; justify-content: center; align-items: center; gap: 8px; margin-top: -6px; }
   #wordInput {
     background: rgba(255,255,255,.06);
     border: 1px solid rgba(255,255,255,.18);
     color: #fff; font-size: 16px; letter-spacing: 4px;
-    padding: 8px 16px; width: 260px; text-align: center; border-radius: 24px;
-    outline: none; backdrop-filter: blur(6px);
+    padding: 8px 16px; width: 200px; text-align: center; border-radius: 24px;
+    outline: none; backdrop-filter: blur(6px); touch-action: manipulation;
     transition: border-color .3s, box-shadow .3s;
   }
   #wordInput:focus {
@@ -44,11 +44,12 @@
     transition: transform .15s, background .2s;
   }
   .btn:hover { background: rgba(255,255,255,.16); transform: scale(1.1); }
+  .btn:active { transform: scale(0.92); background: rgba(255,255,255,.3); }
 
   .hint {
     position: fixed; bottom: 22px; left: 0; right: 0; text-align: center;
     color: rgba(255,255,255,.35); font-size: 12px; letter-spacing: 1.5px;
-    transition: opacity 1.5s; pointer-events: none; z-index: 10;
+    transition: opacity 1.5s; pointer-events: none; z-index: 10; padding: 0 16px;
   }
   .secret {
     position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
@@ -67,7 +68,8 @@
 <div class="hud">
   <div class="title">Parçacık Evreni</div>
   <div class="input-wrap">
-    <input id="wordInput" maxlength="14" placeholder="bir şey yaz, Enter'a bas..." autocomplete="off">
+    <input id="wordInput" maxlength="14" placeholder="bir şey yaz..." autocomplete="off" autocapitalize="off" enterkeyhint="go">
+    <button class="btn" id="btnGo" title="Göster">→</button>
   </div>
   <div class="btns">
     <button class="btn" id="btnTheme" title="Renk teması">🎨</button>
@@ -75,7 +77,7 @@
   </div>
 </div>
 
-<div class="hint" id="hint">fareyi gezdir · tıkla · kelime yaz · <b>kalp</b> ya da <b>yıldız</b> yazmayı dene</div>
+<div class="hint" id="hint">parmağını gezdir · ekrana dokun · kelime yaz → · <b>kalp</b> ya da <b>yıldız</b> yazmayı dene</div>
 <div class="secret" id="secret"></div>
 
 <script>
@@ -87,6 +89,7 @@
   const secretEl = document.getElementById('secret');
   const btnTheme = document.getElementById('btnTheme');
   const btnSound = document.getElementById('btnSound');
+  const btnGo = document.getElementById('btnGo');
 
   let W, H, DPR;
   function resize() {
@@ -169,7 +172,7 @@
     return pts;
   }
 
-  let shapeMode = null;
+  let shapeMode = null, lastText = 'MERHABA';
   function morph(mode, text) {
     shapeMode = mode;
     let pts;
@@ -207,8 +210,11 @@
   }
 
   canvas.addEventListener('pointermove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
-  canvas.addEventListener('pointerleave', () => { mouse.x = -9999; mouse.y = -9999; });
-  canvas.addEventListener('pointerdown', e => burst(e.clientX, e.clientY));
+  canvas.addEventListener('pointerdown', e => { mouse.x = e.clientX; mouse.y = e.clientY; burst(e.clientX, e.clientY); });
+  function clearMouse() { mouse.x = -9999; mouse.y = -9999; }
+  canvas.addEventListener('pointerup', clearMouse);
+  canvas.addEventListener('pointercancel', clearMouse);
+  canvas.addEventListener('pointerleave', clearMouse);
 
   function showSecret(msg) {
     secretEl.textContent = msg;
@@ -220,10 +226,12 @@
     const raw = input.value.trim().toLocaleLowerCase('tr');
     if (!raw) return;
     if (raw === 'kalp' || raw === 'yıldız') {
+      shapeMode = raw; lastText = raw;
       morph(raw, raw);
       showSecret(raw === 'kalp' ? '♡' : '✦');
     } else {
-      morph('text', raw.toLocaleUpperCase('tr'));
+      shapeMode = 'text'; lastText = raw.toLocaleUpperCase('tr');
+      morph('text', lastText);
       if (raw === 'merhaba dünya' || raw === 'hello world') showSecret('Eski dostum! 👋');
       if (raw === 'sürpriz') { ping(659.25); setTimeout(() => ping(880), 150); setTimeout(() => ping(1046.5), 300); }
     }
@@ -231,6 +239,7 @@
     hint.style.opacity = 0;
   }
   input.addEventListener('keydown', e => { if (e.key === 'Enter') onSubmit(); });
+  btnGo.addEventListener('click', onSubmit);
 
   btnTheme.addEventListener('click', () => { theme = (theme + 1) % themes.length; tint(); document.body.style.background = themes[theme].bg; });
   btnSound.addEventListener('click', () => { soundOn = !soundOn; btnSound.textContent = soundOn ? '🔊' : '🔇'; });
@@ -283,7 +292,7 @@
     requestAnimationFrame(tick);
   }
 
-  window.addEventListener('resize', () => { resize(); if (shapeMode) morph(shapeMode, input.value); });
+  window.addEventListener('resize', () => { resize(); if (shapeMode) morph(shapeMode, lastText); });
   morph('text', 'MERHABA');
   setTimeout(() => { hint.style.opacity = 0; }, 9000);
   requestAnimationFrame(tick);
