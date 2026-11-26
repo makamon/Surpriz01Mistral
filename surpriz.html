@@ -66,7 +66,7 @@
 <canvas id="c"></canvas>
 
 <div class="hud">
-  <div class="title">Parçacık Evreni <span id="ver">v3</span></div>
+  <div class="title">Parçacık Evreni <span id="ver">v4</span></div>
   <div class="input-wrap">
     <input id="wordInput" maxlength="14" placeholder="bir şey yaz..." autocomplete="off" autocapitalize="off" enterkeyhint="go">
     <button class="btn" id="btnGo" title="Göster">→</button>
@@ -146,6 +146,10 @@
     for (let y = 0; y < H; y += step)
       for (let x = 0; x < W; x += step)
         if (data[(y * W + x) * 4 + 3] > 128) pts.push([x, y]);
+    for (let i = pts.length - 1; i > 0; i--) {
+      const j = (Math.random() * (i + 1)) | 0;
+      const t = pts[i]; pts[i] = pts[j]; pts[j] = t;
+    }
     return pts;
   }
 
@@ -293,6 +297,7 @@
   }
 
   window.addEventListener('resize', () => { resize(); if (shapeMode) morph(shapeMode, lastText); });
+  if (window.visualViewport) visualViewport.addEventListener('resize', () => { resize(); if (shapeMode) morph(shapeMode, lastText); });
   morph('text', 'MERHABA');
   setTimeout(() => { hint.style.opacity = 0; }, 9000);
   requestAnimationFrame(tick);
